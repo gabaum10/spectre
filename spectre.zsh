@@ -31,7 +31,7 @@ spectre() {
   case "$cmd" in
     "")
       # No args - launch claude in current directory
-      claude
+      ${SPECTRE_CMD:-claude}
       ;;
 
     add)
@@ -133,7 +133,7 @@ spectre() {
         return 1
       fi
 
-      cd "$path" && claude
+      cd "$path" && ${SPECTRE_CMD:-claude}
       ;;
   esac
 }

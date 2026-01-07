@@ -61,6 +61,19 @@ spectre add normandy
 
 Projects are stored in `~/.config/spectre/projects` as simple `name=path` pairs.
 
+## Configuration
+
+### Custom launch command
+
+By default, `spectre` runs `claude` to launch Claude Code. You can customize this with the `SPECTRE_CMD` environment variable.
+
+**Example: Skip permissions prompts**
+```bash
+export SPECTRE_CMD="claude --dangerously-skip-permissions"
+```
+
+Add this to your `~/.zshrc` or `~/.bashrc` before the line that sources `spectre.zsh`.
+
 ## Tab completion
 
 Tab completion works for both subcommands and project names:
