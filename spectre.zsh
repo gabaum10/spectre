@@ -31,7 +31,7 @@ spectre() {
   case "$cmd" in
     "")
       # No args - launch claude in current directory
-      ${SPECTRE_CMD:-claude}
+      PATH="$HOME/.local/bin:$PATH" ${=SPECTRE_CMD:-claude}
       ;;
 
     add)
@@ -116,6 +116,62 @@ spectre() {
       echo "$path"
       ;;
 
+    clean)
+      # Clean registry of duplicates, malformed entries, and invalid paths
+      _spectre_ensure_registry
+
+      if [[ ! -s "$_spectre_registry" ]]; then
+        echo "Registry is clean"
+        return 0
+      fi
+
+      local temp_file="${_spectre_registry}.clean"
+      local -a seen_names
+      local cleaned_count=0
+
+      > "$temp_file"
+
+      while IFS='=' read -r name path; do
+        # Skip empty lines
+        [[ -z "$name" ]] && continue
+
+        # Check for malformed entry (name contains /)
+        if [[ "$name" == */* ]]; then
+          echo "Removed malformed: $name (name contains /)"
+          ((cleaned_count++))
+          continue
+        fi
+
+        # Check for duplicate (keep first occurrence)
+        if (( ${seen_names[(Ie)$name]} )); then
+          echo "Removed duplicate: $name"
+          ((cleaned_count++))
+          continue
+        fi
+
+        # Check if path exists
+        if [[ ! -d "$path" ]]; then
+          echo "Removed invalid path: $name (path does not exist)"
+          ((cleaned_count++))
+          continue
+        fi
+
+        # Entry is valid - keep it
+        echo "${name}=${path}" >> "$temp_file"
+        seen_names+=("$name")
+      done < "$_spectre_registry"
+
+      # Replace registry with cleaned version
+      < "$temp_file" > "$_spectre_registry"
+      rm -f "$temp_file"
+
+      if (( cleaned_count == 0 )); then
+        echo "Registry is clean"
+      else
+        echo "Cleaned $cleaned_count entries"
+      fi
+      ;;
+
     *)
       # Project name - cd and launch claude
       local name="$cmd"
@@ -133,7 +189,7 @@ spectre() {
         return 1
       fi
 
-      cd "$path" && ${SPECTRE_CMD:-claude}
+      cd "$path" && PATH="$HOME/.local/bin:$PATH" ${=SPECTRE_CMD:-claude}
       ;;
   esac
 }
@@ -146,6 +202,7 @@ _spectre_completion() {
     'list:List all registered projects'
     'remove:Remove a project from the registry'
     'path:Print project path'
+    'clean:Clean registry of duplicates and invalid entries'
   )
 
   if (( CURRENT == 2 )); then
