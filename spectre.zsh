@@ -8,7 +8,7 @@ _spectre_registry="${XDG_CONFIG_HOME:-$HOME/.config}/spectre/projects"
 _spectre_ensure_registry() {
   local registry_dir="${_spectre_registry:h}"
   [[ -d "$registry_dir" ]] || mkdir -p "$registry_dir"
-  [[ -f "$_spectre_registry" ]] || touch "$_spectre_registry"
+  [[ -f "$_spectre_registry" ]] || : > "$_spectre_registry"
 }
 
 # Get project path from registry
