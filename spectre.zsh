@@ -73,8 +73,8 @@ spectre() {
       fi
 
       echo "Registered projects:"
-      while IFS='=' read -r name path; do
-        printf "  %-20s %s\n" "$name" "$path"
+      while IFS='=' read -r name project_path; do
+        printf "  %-20s %s\n" "$name" "$project_path"
       done < "$_spectre_registry"
       ;;
 
@@ -131,7 +131,7 @@ spectre() {
 
       > "$temp_file"
 
-      while IFS='=' read -r name path; do
+      while IFS='=' read -r name project_path; do
         # Skip empty lines
         [[ -z "$name" ]] && continue
 
@@ -150,14 +150,14 @@ spectre() {
         fi
 
         # Check if path exists
-        if [[ ! -d "$path" ]]; then
+        if [[ ! -d "$project_path" ]]; then
           echo "Removed invalid path: $name (path does not exist)"
           ((cleaned_count++))
           continue
         fi
 
         # Entry is valid - keep it
-        echo "${name}=${path}" >> "$temp_file"
+        echo "${name}=${project_path}" >> "$temp_file"
         seen_names+=("$name")
       done < "$_spectre_registry"
 
