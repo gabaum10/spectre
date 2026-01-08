@@ -31,13 +31,13 @@ spectre() {
   case "$cmd" in
     "")
       # No args - launch claude in current directory
-      PATH="$HOME/.local/bin:$PATH" ${=SPECTRE_CMD:-claude}
+      ${=SPECTRE_CMD:-claude}
       ;;
 
     add)
       # Add project to registry
       local name="$2"
-      local path="${3:-$PWD}"
+      local project_path="${3:-$PWD}"
 
       if [[ -z "$name" ]]; then
         echo "Usage: spectre add <name> [path]" >&2
@@ -45,10 +45,10 @@ spectre() {
       fi
 
       # Expand path to absolute
-      path="${path:a}"
+      project_path="${project_path:a}"
 
-      if [[ ! -d "$path" ]]; then
-        echo "Error: Directory does not exist: $path" >&2
+      if [[ ! -d "$project_path" ]]; then
+        echo "Error: Directory does not exist: $project_path" >&2
         return 1
       fi
 
@@ -60,8 +60,8 @@ spectre() {
       fi
 
       # Add new entry
-      echo "${name}=${path}" >> "$_spectre_registry"
-      echo "Added project: $name -> $path"
+      echo "${name}=${project_path}" >> "$_spectre_registry"
+      echo "Added project: $name -> $project_path"
       ;;
 
     list)
@@ -107,13 +107,13 @@ spectre() {
         return 1
       fi
 
-      local path="$(_spectre_get_path "$name")"
-      if [[ -z "$path" ]]; then
+      local project_path="$(_spectre_get_path "$name")"
+      if [[ -z "$project_path" ]]; then
         echo "Error: Project not found: $name" >&2
         return 1
       fi
 
-      echo "$path"
+      echo "$project_path"
       ;;
 
     clean)
@@ -175,21 +175,21 @@ spectre() {
     *)
       # Project name - cd and launch claude
       local name="$cmd"
-      local path="$(_spectre_get_path "$name")"
+      local project_path="$(_spectre_get_path "$name")"
 
-      if [[ -z "$path" ]]; then
+      if [[ -z "$project_path" ]]; then
         echo "Error: Project not found: $name" >&2
         echo "Use 'spectre list' to see registered projects." >&2
         return 1
       fi
 
-      if [[ ! -d "$path" ]]; then
-        echo "Error: Project path no longer exists: $path" >&2
+      if [[ ! -d "$project_path" ]]; then
+        echo "Error: Project path no longer exists: $project_path" >&2
         echo "Consider removing with: spectre remove $name" >&2
         return 1
       fi
 
-      cd "$path" && PATH="$HOME/.local/bin:$PATH" ${=SPECTRE_CMD:-claude}
+      cd "$project_path" && ${=SPECTRE_CMD:-claude}
       ;;
   esac
 }
