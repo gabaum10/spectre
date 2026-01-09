@@ -24,6 +24,22 @@ _spectre_list_names() {
   cut -d= -f1 "$_spectre_registry" 2>/dev/null
 }
 
+# Ensure PATH has required directories before launching claude
+# Fixes race condition where PATH may be truncated in some shell contexts
+_spectre_ensure_path() {
+  # System paths
+  [[ :$PATH: == *":/usr/bin:"* ]] || export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+  # Homebrew (Apple Silicon)
+  [[ :$PATH: == *":/opt/homebrew/bin:"* ]] || export PATH="/opt/homebrew/bin:$PATH"
+
+  # Node (n version manager)
+  [[ :$PATH: == *":$HOME/n/bin:"* ]] || export PATH="$HOME/n/bin:$PATH"
+
+  # Cargo/Rust
+  [[ :$PATH: == *":$HOME/.cargo/bin:"* ]] || export PATH="$HOME/.cargo/bin:$PATH"
+}
+
 # Main spectre function
 spectre() {
   local cmd="$1"
@@ -31,6 +47,7 @@ spectre() {
   case "$cmd" in
     "")
       # No args - launch claude in current directory
+      _spectre_ensure_path
       ${=SPECTRE_CMD:-claude}
       ;;
 
@@ -189,6 +206,7 @@ spectre() {
         return 1
       fi
 
+      _spectre_ensure_path
       cd "$project_path" && ${=SPECTRE_CMD:-claude}
       ;;
   esac
