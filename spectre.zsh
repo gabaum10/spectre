@@ -253,4 +253,4 @@ _spectre_completion() {
 }
 
 # Register completion
-compdef _spectre_completion spectre
+(( $+functions[compdef] )) && compdef _spectre_completion spectre
