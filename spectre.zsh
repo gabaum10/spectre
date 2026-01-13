@@ -11,11 +11,27 @@ _spectre_ensure_registry() {
   [[ -f "$_spectre_registry" ]] || : > "$_spectre_registry"
 }
 
-# Get project path from registry
-_spectre_get_path() {
+# Get project entry (path and optional identity)
+_spectre_get_entry() {
   local name="$1"
   _spectre_ensure_registry
   grep "^${name}=" "$_spectre_registry" 2>/dev/null | cut -d= -f2-
+}
+
+# Get project path from registry (strip identity if present)
+_spectre_get_path() {
+  local name="$1"
+  local entry=$(_spectre_get_entry "$name")
+  echo "${entry%%:*}"  # everything before first :
+}
+
+# Get the identity (empty if not specified)
+_spectre_get_identity() {
+  local name="$1"
+  local entry=$(_spectre_get_entry "$name")
+  if [[ "$entry" == *:* ]]; then
+    echo "${entry##*:}"  # everything after last :
+  fi
 }
 
 # List all project names
@@ -53,16 +69,18 @@ spectre() {
 
     add)
       # Add project to registry
+      # Usage: spectre add <name> [path] [identity]
       local name="$2"
       local project_path="${3:-$PWD}"
+      local identity="$4"
 
       if [[ -z "$name" ]]; then
-        echo "Usage: spectre add <name> [path]" >&2
+        echo "Usage: spectre add <name> [path] [identity]" >&2
         return 1
       fi
 
       # Expand path to absolute
-      project_path="${project_path:a}"
+      project_path="${~project_path:a}"
 
       if [[ ! -d "$project_path" ]]; then
         echo "Error: Directory does not exist: $project_path" >&2
@@ -76,22 +94,33 @@ spectre() {
         sed -i.bak "/^${name}=/d" "$_spectre_registry" && rm -f "${_spectre_registry}.bak"
       fi
 
-      # Add new entry
-      echo "${name}=${project_path}" >> "$_spectre_registry"
-      echo "Added project: $name -> $project_path"
+      # Add new entry with optional identity
+      if [[ -n "$identity" ]]; then
+        echo "${name}=${project_path}:${identity}" >> "$_spectre_registry"
+        echo "Added project: $name -> $project_path (identity: $identity)"
+      else
+        echo "${name}=${project_path}" >> "$_spectre_registry"
+        echo "Added project: $name -> $project_path"
+      fi
       ;;
 
     list)
       # List all projects
       _spectre_ensure_registry
       if [[ ! -s "$_spectre_registry" ]]; then
-        echo "No projects registered. Use 'spectre add <name> [path]' to add one."
+        echo "No projects registered. Use 'spectre add <name> [path] [identity]' to add one."
         return 0
       fi
 
       echo "Registered projects:"
-      while IFS='=' read -r name project_path; do
-        printf "  %-20s %s\n" "$name" "$project_path"
+      while IFS='=' read -r name entry; do
+        local project_path="${entry%%:*}"
+        if [[ "$entry" == *:* ]]; then
+          local identity="${entry##*:}"
+          printf "  %-20s %s (identity: %s)\n" "$name" "$project_path" "$identity"
+        else
+          printf "  %-20s %s\n" "$name" "$project_path"
+        fi
       done < "$_spectre_registry"
       ;;
 
@@ -189,10 +218,32 @@ spectre() {
       fi
       ;;
 
+    -h|--help|help)
+      cat << 'EOF'
+spectre - Quick project launcher with identity support
+
+Usage:
+  spectre <project>              Launch project (activates identity if needed)
+  spectre add <name> <path> [identity]   Add project to registry
+  spectre remove <name>          Remove project from registry
+  spectre list                   List all projects
+  spectre path <name>            Show project path
+  spectre clean                  Remove projects with invalid paths
+  spectre -h|--help              Show this help
+
+Examples:
+  spectre client                 Launch client project
+  spectre add myproj /path/to/proj normandy   Add with identity
+  spectre add myproj /path/to/proj            Add without identity
+EOF
+      return 0
+      ;;
+
     *)
       # Project name - cd and launch claude
       local name="$cmd"
       local project_path="$(_spectre_get_path "$name")"
+      local identity="$(_spectre_get_identity "$name")"
 
       if [[ -z "$project_path" ]]; then
         echo "Error: Project not found: $name" >&2
@@ -207,6 +258,24 @@ spectre() {
       fi
 
       _spectre_ensure_path
+
+      # Check if we need identity activation
+      if [[ -n "$identity" ]]; then
+        local env_home="$HOME/.${identity}-env"
+
+        # Check if already in correct isolated environment
+        if [[ "$HOME" != "$env_home" ]]; then
+          # Need to activate identity first
+          echo "Activating $identity..."
+          claude-os activate "$identity"
+
+          # Now launch with isolated HOME
+          cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+          return $?
+        fi
+      fi
+
+      # Already in correct env (or no identity needed) - just cd and launch
       cd "$project_path" && ${=SPECTRE_CMD:-claude}
       ;;
   esac
@@ -247,6 +316,14 @@ _spectre_completion() {
       add)
         # For add, second arg is path (directory completion)
         _directories
+        ;;
+    esac
+  elif (( CURRENT == 5 )); then
+    # Fourth argument context
+    case "$words[2]" in
+      add)
+        # For add, third arg is identity (no completion)
+        _message 'identity name'
         ;;
     esac
   fi
