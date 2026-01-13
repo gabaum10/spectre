@@ -34,6 +34,32 @@ _spectre_get_identity() {
   fi
 }
 
+# Check if name is a persona in claude-os registry
+_spectre_is_persona() {
+  local name="$1"
+  local registry="$HOME/.claude-os/registry.json"
+  [[ -f "$registry" ]] && jq -e ".apps | has(\"$name\")" "$registry" >/dev/null 2>&1
+}
+
+# Get default persona from config
+_spectre_get_default_persona() {
+  local config="$HOME/.claude-os/config.json"
+  if [[ -f "$config" ]]; then
+    jq -r '.defaultPersona // "normandy"' "$config" 2>/dev/null || echo "normandy"
+  else
+    echo "normandy"
+  fi
+}
+
+# Get path for a persona from registry
+_spectre_get_persona_path() {
+  local name="$1"
+  local registry="$HOME/.claude-os/registry.json"
+  if [[ -f "$registry" ]]; then
+    jq -r ".apps[\"$name\"].path // empty" "$registry" 2>/dev/null
+  fi
+}
+
 # List all project names
 _spectre_list_names() {
   _spectre_ensure_registry
@@ -240,43 +266,100 @@ EOF
       ;;
 
     *)
-      # Project name - cd and launch claude
+      # Resolution order:
+      # 1. Check spectre projects registry
+      # 2. Check if arg is a persona in claude-os registry
+      # 3. Check if arg is a valid directory path
+      # 4. Error
       local name="$cmd"
       local project_path="$(_spectre_get_path "$name")"
       local identity="$(_spectre_get_identity "$name")"
 
-      if [[ -z "$project_path" ]]; then
-        echo "Error: Project not found: $name" >&2
-        echo "Use 'spectre list' to see registered projects." >&2
-        return 1
-      fi
+      # Case 1: Found in spectre projects registry - use existing logic
+      if [[ -n "$project_path" ]]; then
+        if [[ ! -d "$project_path" ]]; then
+          echo "Error: Project path no longer exists: $project_path" >&2
+          echo "Consider removing with: spectre remove $name" >&2
+          return 1
+        fi
 
-      if [[ ! -d "$project_path" ]]; then
-        echo "Error: Project path no longer exists: $project_path" >&2
-        echo "Consider removing with: spectre remove $name" >&2
-        return 1
-      fi
+        _spectre_ensure_path
 
-      _spectre_ensure_path
+        # Check if we need identity activation
+        if [[ -n "$identity" ]]; then
+          local env_home="$HOME/.${identity}-env"
 
-      # Check if we need identity activation
-      if [[ -n "$identity" ]]; then
-        local env_home="$HOME/.${identity}-env"
+          # Check if already in correct isolated environment
+          if [[ "$HOME" != "$env_home" ]]; then
+            # Need to activate identity first
+            echo "Activating $identity..."
+            claude-os activate "$identity"
 
-        # Check if already in correct isolated environment
-        if [[ "$HOME" != "$env_home" ]]; then
-          # Need to activate identity first
-          echo "Activating $identity..."
-          claude-os activate "$identity"
+            # Now launch with isolated HOME
+            cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+            return $?
+          fi
 
-          # Now launch with isolated HOME
-          cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
-          return $?
+          # Already in correct env - just cd and launch
+          cd "$project_path" && ${=SPECTRE_CMD:-claude}
+          return 0
+        else
+          # No identity specified - use default persona
+          local default_persona="$(_spectre_get_default_persona)"
+          local env_home="$HOME/.${default_persona}-env"
+
+          # Check if already in correct isolated environment
+          if [[ "$HOME" != "$env_home" ]]; then
+            # Need to activate default persona first
+            echo "Activating $default_persona..."
+            claude-os activate "$default_persona"
+
+            # Now launch with isolated HOME
+            cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+            return $?
+          fi
+
+          # Already in correct env - just cd and launch
+          cd "$project_path" && ${=SPECTRE_CMD:-claude}
+          return 0
         fi
       fi
 
-      # Already in correct env (or no identity needed) - just cd and launch
-      cd "$project_path" && ${=SPECTRE_CMD:-claude}
+      # Case 2: Check if arg is a persona in claude-os registry
+      if _spectre_is_persona "$name"; then
+        echo "Activating $name..."
+        claude-os activate "$name"
+
+        local persona_path="$(_spectre_get_persona_path "$name")"
+        if [[ -n "$persona_path" ]]; then
+          local env_home="$HOME/.${name}-env"
+          _spectre_ensure_path
+          cd "$PWD" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+        else
+          echo "Error: Failed to get path for persona: $name" >&2
+          return 1
+        fi
+        return 0
+      fi
+
+      # Case 3: Check if arg is a valid directory path
+      local expanded_path="${~name:a}"
+      if [[ -d "$expanded_path" ]]; then
+        local default_persona="$(_spectre_get_default_persona)"
+        echo "Activating $default_persona..."
+        claude-os activate "$default_persona"
+
+        local env_home="$HOME/.${default_persona}-env"
+        _spectre_ensure_path
+        cd "$expanded_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+        return 0
+      fi
+
+      # Case 4: Error - not found in any resolution path
+      echo "Error: Not found: $name" >&2
+      echo "Not a registered project, persona, or valid directory path." >&2
+      echo "Use 'spectre list' to see registered projects." >&2
+      return 1
       ;;
   esac
 }
