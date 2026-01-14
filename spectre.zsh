@@ -295,8 +295,8 @@ EOF
             echo "Activating $identity..."
             claude-os activate "$identity"
 
-            # Now launch with isolated HOME
-            cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+            # Now launch with isolated HOME (preserve REAL_HOME for registry access)
+            cd "$project_path" && REAL_HOME="$HOME" HOME="$env_home" ${=SPECTRE_CMD:-claude}
             return $?
           fi
 
@@ -314,8 +314,8 @@ EOF
             echo "Activating $default_persona..."
             claude-os activate "$default_persona"
 
-            # Now launch with isolated HOME
-            cd "$project_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+            # Now launch with isolated HOME (preserve REAL_HOME for registry access)
+            cd "$project_path" && REAL_HOME="$HOME" HOME="$env_home" ${=SPECTRE_CMD:-claude}
             return $?
           fi
 
@@ -334,7 +334,7 @@ EOF
         if [[ -n "$persona_path" ]]; then
           local env_home="$HOME/.${name}-env"
           _spectre_ensure_path
-          cd "$PWD" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+          cd "$PWD" && REAL_HOME="$HOME" HOME="$env_home" ${=SPECTRE_CMD:-claude}
         else
           echo "Error: Failed to get path for persona: $name" >&2
           return 1
@@ -351,7 +351,7 @@ EOF
 
         local env_home="$HOME/.${default_persona}-env"
         _spectre_ensure_path
-        cd "$expanded_path" && HOME="$env_home" ${=SPECTRE_CMD:-claude}
+        cd "$expanded_path" && REAL_HOME="$HOME" HOME="$env_home" ${=SPECTRE_CMD:-claude}
         return 0
       fi
 
