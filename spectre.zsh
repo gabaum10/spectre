@@ -88,9 +88,14 @@ spectre() {
 
   case "$cmd" in
     "")
-      # No args - launch claude in current directory
+      # No args - launch claude in current directory with default persona
+      local default_persona="$(_spectre_get_default_persona)"
+      echo "Activating $default_persona..."
+      claude-os activate "$default_persona"
+
+      local env_home="$HOME/.${default_persona}-env"
       _spectre_ensure_path
-      ${=SPECTRE_CMD:-claude}
+      REAL_HOME="$HOME" HOME="$env_home" ${=SPECTRE_CMD:-claude}
       ;;
 
     add)
